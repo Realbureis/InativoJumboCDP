@@ -7,31 +7,21 @@ import io
 
 st.set_page_config(page_title="Retenção Preditiva - Jumbo CDP", page_icon="🧠", layout="wide")
 st.title("🧠 Máquina de Retenção Preditiva — Jumbo CDP")
-st.markdown("Gatilhos calculados a partir da **mediana real de recompra** de cada unidade prisional — 5 meses · 15.497 pedidos · 167 unidades mapeadas.")
+st.markdown(
+    "Gatilhos calculados a partir da **mediana real de recompra** por unidade prisional — "
+    "5 meses · 15.497 pedidos · **149 unidades mapeadas** · teto de 45 dias no crítico."
+)
 
-# ─── WEBHOOKS ───────────────────────────────────────────────────────────────
+# ─── WEBHOOKS ────────────────────────────────────────────────────────────────
 WEBHOOK_ANTECIPACAO = "https://n8n.corcaqui.com.br/webhook/regua_antecipacao"
 WEBHOOK_MEDIANA     = "https://n8n.corcaqui.com.br/webhook/regua_mediana_foco"
 WEBHOOK_CRITICO     = "https://n8n.corcaqui.com.br/webhook/regua_alerta_critico"
 
-# ─── MAPEAMENTO REAL: (antecipação, mediana, crítico) em dias ───────────────
-# Fonte: análise de 15.497 pedidos — janeiro a maio de 2026
-# Fórmula: antecipação = mediana × 0.6 | crítico = mediana × 1.7
+# ─── MAPEAMENTO REAL ─────────────────────────────────────────────────────────
+# Fonte: 15.497 pedidos jan–mai 2026 | Fórmula: ant=med×0.6 | cri=min(med×1.7, 45)
+# Unidades com mediana < 7 dias (ruído) e > 45 dias (churn definitivo) são excluídas.
+# Formato: 'Unidade': (antecipação, mediana, crítico)
 MAPEAMENTO_UNIDADES = {
-    'Penitenciária Limeira': (3, 1, 2),
-    'Penitenciária Balbinos 2': (3, 1, 2),
-    'Penitenciária Reginópolis 2': (3, 2, 3),
-    'Penitenciária Pacaembu': (3, 2, 3),
-    'International Prisoners - Sant\'Ana - Women': (3, 3, 6),
-    'CDP São Vicente': (3, 4, 7),
-    'CDP Vila Independência': (3, 4, 7),
-    'Penitenciária Capela do Alto 2': (3, 5, 8),
-    'CR Limeira': (3, 5, 8),
-    'CR Ourinhos': (3, 5, 9),
-    'Hospital Franco da Rocha 1': (4, 6, 10),
-    'Penitenciária Getulina': (4, 6, 10),
-    'CDP Americana': (4, 6, 11),
-    'CDP São José dos Campos': (4, 6, 11),
     'CPP Franco da Rocha - Castelinho': (4, 7, 12),
     'Détenus Français - Sant\'Ana': (4, 7, 12),
     'Penitenciária Itapetininga 1': (4, 7, 12),
@@ -157,246 +147,273 @@ MAPEAMENTO_UNIDADES = {
     'Penitenciária Cerqueira César 1': (15, 25, 43),
     'Penitenciária Irapuru': (16, 26, 44),
     'Penitenciária Riolândia': (16, 26, 45),
-    'CR Birigui': (16, 27, 46),
-    'Penitenciária Presidente Venceslau 1': (16, 27, 47),
-    'Penitenciária Franca': (17, 28, 48),
-    'Penitenciária Iperó': (17, 28, 48),
-    'Penitenciária Pirajuí 1': (17, 28, 48),
-    'Penitenciária São Vicente 2': (17, 29, 49),
-    'CDP Campinas': (17, 29, 49),
-    'Penitenciária Flórida Paulista': (17, 29, 49),
-    'Penitenciária Lucélia': (18, 30, 51),
-    'Penitenciária de Itirapina 1': (18, 30, 51),
-    'Penitenciária Pirajuí Feminina': (18, 30, 51),
-    'Penitenciária Itaí': (19, 31, 53),
-    'CR Bragança Paulista': (19, 32, 54),
-    'Penitenciária Avanhandava': (19, 32, 54),
-    'Penitenciária Lavínia 2': (19, 32, 54),
-    'Penitenciária Sorocaba 1': (19, 32, 54),
-    'Penitenciária Álvaro de Carvalho 2': (20, 32, 55),
-    'Penitenciaria Caiuá': (20, 32, 55),
-    'CR de Araraquara': (20, 33, 56),
-    'Penitenciária Marília': (20, 34, 58),
-    'José Parada Neto – Semiaberto (RSA)': (20, 34, 58),
-    'Penitenciária Hortolândia 3': (22, 36, 61),
-    'CPP Bauru 2': (23, 38, 65),
-    'CPP de Campinas -Professor Ataliba Nogueira': (28, 46, 78),
-    'CDP Pacaembu 1': (28, 47, 80),
-    'Penitenciária Serra Azul 1': (28, 47, 80),
-    'Penitenciária Álvaro de Carvalho': (28, 47, 80),
+    'CR Birigui': (16, 27, 45),
+    'Penitenciária Presidente Venceslau 1': (16, 27, 45),
+    'Penitenciária Franca': (17, 28, 45),
+    'Penitenciária Iperó': (17, 28, 45),
+    'Penitenciária Pirajuí 1': (17, 28, 45),
+    'Penitenciária São Vicente 2': (17, 29, 45),
+    'CDP Campinas': (17, 29, 45),
+    'Penitenciária Flórida Paulista': (17, 29, 45),
+    'Penitenciária Lucélia': (18, 30, 45),
+    'Penitenciária de Itirapina 1': (18, 30, 45),
+    'Penitenciária Pirajuí Feminina': (18, 30, 45),
+    'Penitenciária Itaí': (19, 31, 45),
+    'CR Bragança Paulista': (19, 32, 45),
+    'Penitenciária Avanhandava': (19, 32, 45),
+    'Penitenciária Lavínia 2': (19, 32, 45),
+    'Penitenciária Sorocaba 1': (19, 32, 45),
+    'Penitenciária Álvaro de Carvalho 2': (20, 32, 45),
+    'Penitenciaria Caiuá': (20, 32, 45),
+    'CR de Araraquara': (20, 33, 45),
+    'Penitenciária Marília': (20, 34, 45),
+    'José Parada Neto – Semiaberto (RSA)': (20, 34, 45),
+    'Penitenciária Hortolândia 3': (22, 36, 45),
+    'CPP Bauru 2': (23, 38, 45),
 }
 
-# ─── FUNÇÕES AUXILIARES ──────────────────────────────────────────────────────
-def converter_para_excel(df):
+# ─── FUNÇÕES AUXILIARES ───────────────────────────────────────────────────────
+def converter_para_excel(df: pd.DataFrame) -> bytes:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Lote_Disparo')
     return output.getvalue()
 
-def normalizar_unidade(nome):
-    """Remove espaços extras e normaliza o nome da unidade."""
-    return str(nome).strip()
 
-def obter_gatilhos(unidade):
-    """Retorna (ant, med, cri) para a unidade. Tenta match exato, depois fallback."""
+def obter_gatilhos(unidade: str):
+    """
+    Retorna ((ant, med, cri), mapeado).
+    Tenta match exato → substring → fallback (mediana geral 14 dias).
+    """
     if unidade in MAPEAMENTO_UNIDADES:
         return MAPEAMENTO_UNIDADES[unidade], True
 
-    # Fallback: busca por substring para lidar com variações de espaço
+    # Match por substring para variações de espaço/acento
+    u_lower = unidade.lower()
     for chave, gatilhos in MAPEAMENTO_UNIDADES.items():
-        if chave.lower() in unidade.lower() or unidade.lower() in chave.lower():
+        if chave.lower() in u_lower or u_lower in chave.lower():
             return gatilhos, True
 
-    # Fallback final: mediana geral da operação (14 dias)
+    # Fallback: mediana geral da operação = 14 dias → (8, 14, 24)
     return (8, 14, 24), False
 
-def enviar_webhook(url, dados, nome_lote):
-    """Envia dados para webhook e retorna (sucesso, mensagem)."""
+
+def enviar_webhook(url: str, dados: list, nome_lote: str):
+    """Envia para webhook com timeout e retorna (sucesso, mensagem)."""
     try:
         res = requests.post(
             url,
             headers={"Content-Type": "application/json"},
             data=json.dumps(dados, default=str),
-            timeout=15
+            timeout=15,
         )
         if res.status_code in [200, 201]:
             return True, f"✅ {len(dados)} contatos enviados para {nome_lote}!"
-        else:
-            return False, f"❌ Erro em {nome_lote}. Status HTTP: {res.status_code}"
+        return False, f"❌ Erro em {nome_lote} — HTTP {res.status_code}: {res.text[:200]}"
     except requests.exceptions.Timeout:
-        return False, f"❌ Timeout em {nome_lote} — o n8n demorou mais de 15s."
+        return False, f"❌ Timeout em {nome_lote} — n8n demorou mais de 15s."
     except Exception as e:
         return False, f"❌ Falha de conexão em {nome_lote}: {e}"
 
-def exibir_lote(df_grupo, titulo, nome_arquivo, cor_badge):
+
+def exibir_lote(df_grupo: pd.DataFrame, titulo: str, nome_arquivo: str):
     st.subheader(titulo)
     if not df_grupo.empty:
         st.dataframe(df_grupo, use_container_width=True)
-        dados_excel = converter_para_excel(df_grupo)
         st.download_button(
             label=f"📥 Baixar {titulo} (.xlsx)",
-            data=dados_excel,
+            data=converter_para_excel(df_grupo),
             file_name=f"{nome_arquivo}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     else:
         st.info(f"Nenhum cliente elegível para {titulo} hoje.")
     st.divider()
 
-# ─── UPLOAD ──────────────────────────────────────────────────────────────────
-uploaded_file = st.file_uploader(
-    "Arraste o relatório de vendas aqui (CSV ou Excel)",
-    type=["csv", "xlsx"]
-)
 
-if uploaded_file is not None:
+def ler_arquivo(uploaded_file) -> pd.DataFrame | None:
+    """Tenta ler Excel e múltiplos encodings de CSV. Retorna DataFrame ou None."""
+    # Tentativa 1: Excel
     try:
-        df = None
+        uploaded_file.seek(0)
+        df = pd.read_excel(uploaded_file)
+        if df.shape[1] > 1:
+            return df
+    except Exception:
+        pass
 
-        # Tentativa 1: Excel
+    # Tentativa 2: CSV com variações de separador e encoding
+    for sep, enc in [
+        (';', 'utf-8-sig'), (';', 'iso-8859-1'),
+        (',', 'utf-8'), (';', 'utf-8'), (',', 'iso-8859-1'),
+    ]:
         try:
             uploaded_file.seek(0)
-            df = pd.read_excel(uploaded_file)
+            df = pd.read_csv(uploaded_file, sep=sep, encoding=enc, on_bad_lines='skip')
+            if df.shape[1] > 1:
+                return df
         except Exception:
-            pass
+            continue
 
-        # Tentativa 2: CSV com múltiplos encodings
-        if df is None or df.shape[1] <= 1:
-            for sep, enc in [(';', 'utf-8-sig'), (';', 'iso-8859-1'), (',', 'utf-8'), (';', 'utf-8'), (',', 'iso-8859-1')]:
-                try:
-                    uploaded_file.seek(0)
-                    temp = pd.read_csv(uploaded_file, sep=sep, encoding=enc, on_bad_lines='skip')
-                    if temp.shape[1] > 1:
-                        df = temp
-                        break
-                except Exception:
-                    continue
+    return None
 
-        if df is None or 'Data' not in df.columns:
-            st.error("❌ Arquivo não reconhecido. Verifique se a coluna 'Data' existe.")
-            st.stop()
 
-        # ─── LIMPEZA ─────────────────────────────────────────────────────────
-        # Normalizar nomes de colunas para evitar variações de case/espaço
-        df.columns = df.columns.str.strip()
+# ─── UPLOAD ───────────────────────────────────────────────────────────────────
+uploaded_file = st.file_uploader(
+    "Arraste o relatório de vendas aqui (CSV ou Excel)",
+    type=["csv", "xlsx"],
+)
 
-        # Filtro: apenas clientes com pedidos realmente enviados
-        col_env = next((c for c in df.columns if c.lower().strip() == 'quant. pedidos enviados'), None)
-        if col_env:
-            df = df[df[col_env] >= 1].copy()
+if uploaded_file is None:
+    st.stop()
 
-        # Conversão de data forçando padrão brasileiro
-        df['Data'] = pd.to_datetime(df['Data'], dayfirst=True).dt.tz_localize(None)
-        today = pd.to_datetime(datetime.now().date())
-        df['Days_Since'] = (today - df['Data']).dt.days
+try:
+    df = ler_arquivo(uploaded_file)
 
-        # Normalizar nomes de unidade
-        df['Unidade Prisional'] = df['Unidade Prisional'].apply(normalizar_unidade)
+    if df is None:
+        st.error("❌ Não foi possível ler o arquivo. Verifique o formato e tente novamente.")
+        st.stop()
 
-        # Manter apenas o pedido mais recente por cliente
-        df = df.sort_values('Data', ascending=False).drop_duplicates(subset=['Codigo Cliente'], keep='first')
+    # ─── LIMPEZA ──────────────────────────────────────────────────────────────
+    df.columns = df.columns.str.strip()
 
-        # ─── SIDEBAR ─────────────────────────────────────────────────────────
-        todas_unidades = sorted(df['Unidade Prisional'].dropna().unique())
-        unidades_nao_mapeadas = set()
+    if 'Data' not in df.columns:
+        st.error("❌ Coluna 'Data' não encontrada. Verifique o arquivo.")
+        st.stop()
 
-        st.sidebar.metric("🏢 Unidades no relatório", f"{len(todas_unidades)} unidades")
-        st.sidebar.metric("👥 Clientes únicos", f"{df['Codigo Cliente'].nunique():,}")
-        unidade_selecionada = st.sidebar.selectbox(
-            "🔍 Auditar unidade específica:",
-            ["Ver Todas"] + todas_unidades
+    if 'Unidade Prisional' not in df.columns:
+        st.error("❌ Coluna 'Unidade Prisional' não encontrada. Verifique o arquivo.")
+        st.stop()
+
+    # Filtro: apenas pedidos realmente enviados
+    col_env = next(
+        (c for c in df.columns if c.lower().strip() == 'quant. pedidos enviados'), None
+    )
+    if col_env:
+        df = df[df[col_env] >= 1].copy()
+
+    # Conversão de data (padrão brasileiro dd/mm/aaaa)
+    df['Data'] = pd.to_datetime(df['Data'], dayfirst=True).dt.tz_localize(None)
+    today = pd.to_datetime(datetime.now().date())
+    df['Days_Since'] = (today - df['Data']).dt.days
+
+    # Normalizar unidade e remover espaços extras
+    df['Unidade Prisional'] = df['Unidade Prisional'].astype(str).str.strip()
+
+    # Manter apenas o pedido mais recente por cliente único
+    df = (
+        df.sort_values('Data', ascending=False)
+        .drop_duplicates(subset=['Codigo Cliente'], keep='first')
+    )
+
+    # ─── SIDEBAR ──────────────────────────────────────────────────────────────
+    todas_unidades = sorted(df['Unidade Prisional'].dropna().unique())
+    unidades_nao_mapeadas: set[str] = set()
+
+    st.sidebar.metric("🏢 Unidades no relatório", len(todas_unidades))
+    st.sidebar.metric("👥 Clientes únicos", f"{df['Codigo Cliente'].nunique():,}")
+    unidade_selecionada = st.sidebar.selectbox(
+        "🔍 Auditar unidade específica:",
+        ["Ver Todas"] + todas_unidades,
+    )
+
+    # ─── MOTOR DE CLASSIFICAÇÃO ───────────────────────────────────────────────
+    lote_antecipacao, lote_mediana, lote_critico = [], [], []
+
+    for _, row in df.iterrows():
+        dias = row['Days_Since']
+        unidade = row['Unidade Prisional']
+        (ant, med, cri), mapeado = obter_gatilhos(unidade)
+
+        if not mapeado:
+            unidades_nao_mapeadas.add(unidade)
+
+        # Janela de ±1 dia — não perde clientes em dias sem execução
+        # elif garante que cada cliente entre em no máximo 1 lote
+        if ant - 1 <= dias <= ant + 1:
+            lote_antecipacao.append(row)
+        elif med - 1 <= dias <= med + 1:
+            lote_mediana.append(row)
+        elif cri - 1 <= dias <= cri + 1:
+            lote_critico.append(row)
+
+    # Alertar unidades usando fallback
+    if unidades_nao_mapeadas:
+        st.sidebar.warning(
+            f"⚠️ {len(unidades_nao_mapeadas)} unidade(s) sem mapeamento — "
+            f"usando fallback (14 dias):\n\n" +
+            "\n".join(f"• {u}" for u in sorted(unidades_nao_mapeadas))
         )
 
-        # ─── MOTOR DE CLASSIFICAÇÃO ───────────────────────────────────────────
-        lote_antecipacao, lote_mediana, lote_critico = [], [], []
+    # ─── MONTAR DATAFRAMES ────────────────────────────────────────────────────
+    def para_df(lista):
+        return (
+            pd.DataFrame(lista).drop(columns=['Days_Since'], errors='ignore')
+            if lista else pd.DataFrame()
+        )
 
-        for _, row in df.iterrows():
-            dias = row['Days_Since']
-            unidade = row['Unidade Prisional']
-            (ant, med, cri), mapeado = obter_gatilhos(unidade)
+    df_ant = para_df(lote_antecipacao)
+    df_med = para_df(lote_mediana)
+    df_cri = para_df(lote_critico)
 
-            if not mapeado:
-                unidades_nao_mapeadas.add(unidade)
+    # Filtro de auditoria por unidade (sidebar)
+    if unidade_selecionada != "Ver Todas":
+        filtro = lambda d: (
+            d[d['Unidade Prisional'] == unidade_selecionada] if not d.empty else d
+        )
+        df_ant = filtro(df_ant)
+        df_med = filtro(df_med)
+        df_cri = filtro(df_cri)
 
-            # Janela de ±1 dia para não perder clientes em dias sem execução
-            if ant - 1 <= dias <= ant + 1:
-                lote_antecipacao.append(row)
-            elif med - 1 <= dias <= med + 1:
-                lote_mediana.append(row)
-            elif cri - 1 <= dias <= cri + 1:
-                lote_critico.append(row)
+    # ─── MÉTRICAS ─────────────────────────────────────────────────────────────
+    st.divider()
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📋 Clientes processados", f"{len(df):,}")
+    c2.metric("📅 Lote 1 — Antecipação", f"{len(df_ant)}")
+    c3.metric("🎯 Lote 2 — Mediana", f"{len(df_med)}")
+    c4.metric("🚨 Lote 3 — Crítico", f"{len(df_cri)}")
+    st.divider()
 
-        # Avisar sobre unidades no fallback
-        if unidades_nao_mapeadas:
-            st.sidebar.warning(
-                f"⚠️ {len(unidades_nao_mapeadas)} unidade(s) usando mediana geral (14 dias):\n\n" +
-                "\n".join(f"• {u}" for u in sorted(unidades_nao_mapeadas))
-            )
+    # ─── EXIBIÇÃO DOS LOTES ───────────────────────────────────────────────────
+    exibir_lote(df_ant, "1. Lote Antecipação", "lote_antecipacao")
+    exibir_lote(df_med, "2. Lote Mediana de Precisão", "lote_mediana")
+    exibir_lote(df_cri, "3. Lote Alerta Crítico", "lote_critico")
 
-        # ─── MONTAR DATAFRAMES ───────────────────────────────────────────────
-        cols_drop = ['Days_Since']
+    # ─── DISPARO PARA O n8n ───────────────────────────────────────────────────
+    st.subheader("🔥 Central de Disparo Automatizado")
 
-        df_ant = pd.DataFrame(lote_antecipacao).drop(columns=cols_drop, errors='ignore') if lote_antecipacao else pd.DataFrame()
-        df_med = pd.DataFrame(lote_mediana).drop(columns=cols_drop, errors='ignore') if lote_mediana else pd.DataFrame()
-        df_cri = pd.DataFrame(lote_critico).drop(columns=cols_drop, errors='ignore') if lote_critico else pd.DataFrame()
+    total = len(df_ant) + len(df_med) + len(df_cri)
 
-        # Filtro de auditoria por unidade
-        if unidade_selecionada != "Ver Todas":
-            df_ant = df_ant[df_ant['Unidade Prisional'] == unidade_selecionada] if not df_ant.empty else df_ant
-            df_med = df_med[df_med['Unidade Prisional'] == unidade_selecionada] if not df_med.empty else df_med
-            df_cri = df_cri[df_cri['Unidade Prisional'] == unidade_selecionada] if not df_cri.empty else df_cri
+    if total == 0:
+        st.info(
+            "Nenhum cliente elegível para disparo hoje. "
+            "Verifique se o relatório cobre o período correto."
+        )
+    else:
+        st.info(f"**{total} contatos** prontos para disparo nos 3 fluxos do n8n.")
 
-        # ─── MÉTRICAS ────────────────────────────────────────────────────────
-        st.divider()
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("📋 Clientes processados", f"{len(df):,}")
-        col2.metric("📅 Lote 1 — Antecipação", f"{len(df_ant)} contatos")
-        col3.metric("🎯 Lote 2 — Mediana", f"{len(df_med)} contatos")
-        col4.metric("🚨 Lote 3 — Crítico", f"{len(df_cri)} contatos")
-        st.divider()
+        if st.button("🚀 Disparar Mensagens para o n8n", type="primary", use_container_width=True):
+            sucesso_geral = True
+            disparos = [
+                (df_ant, WEBHOOK_ANTECIPACAO, "Antecipação"),
+                (df_med, WEBHOOK_MEDIANA, "Mediana"),
+                (df_cri, WEBHOOK_CRITICO, "Crítico"),
+            ]
 
-        # ─── EXIBIÇÃO DOS LOTES ───────────────────────────────────────────────
-        exibir_lote(df_ant, "1. Lote Antecipação", "lote_antecipacao", "blue")
-        exibir_lote(df_med, "2. Lote Mediana de Precisão", "lote_mediana", "green")
-        exibir_lote(df_cri, "3. Lote Alerta Crítico", "lote_critico", "red")
+            for df_lote, url, nome in disparos:
+                if df_lote.empty:
+                    continue
+                ok, msg = enviar_webhook(url, df_lote.to_dict(orient='records'), nome)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+                    sucesso_geral = False
 
-        # ─── DISPARO PARA O n8n ───────────────────────────────────────────────
-        st.subheader("🔥 Central de Disparo Automatizado")
+            if sucesso_geral:
+                st.balloons()
+                st.success("🎉 Todos os fluxos enviados com sucesso ao n8n!")
 
-        total_contatos = len(df_ant) + len(df_med) + len(df_cri)
-        if total_contatos == 0:
-            st.info("Nenhum cliente elegível para disparo hoje. Tente amanhã ou revise o período do relatório.")
-        else:
-            st.info(f"**{total_contatos} contatos** prontos para disparo nos 3 fluxos do n8n.")
-            if st.button("🚀 Disparar Mensagens Inteligentes para o n8n", type="primary", use_container_width=True):
-                resultados = []
-                sucesso_geral = True
-
-                if not df_ant.empty:
-                    ok, msg = enviar_webhook(WEBHOOK_ANTECIPACAO, df_ant.to_dict(orient='records'), "Antecipação")
-                    resultados.append((ok, msg))
-                    if not ok: sucesso_geral = False
-
-                if not df_med.empty:
-                    ok, msg = enviar_webhook(WEBHOOK_MEDIANA, df_med.to_dict(orient='records'), "Mediana")
-                    resultados.append((ok, msg))
-                    if not ok: sucesso_geral = False
-
-                if not df_cri.empty:
-                    ok, msg = enviar_webhook(WEBHOOK_CRITICO, df_cri.to_dict(orient='records'), "Crítico")
-                    resultados.append((ok, msg))
-                    if not ok: sucesso_geral = False
-
-                for ok, msg in resultados:
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-
-                if sucesso_geral:
-                    st.balloons()
-                    st.success("🎉 Todos os fluxos foram enviados com sucesso ao n8n!")
-
-    except Exception as e:
-        st.error(f"Erro crítico no processamento: {e}")
-        st.exception(e)
+except Exception as e:
+    st.error(f"Erro crítico no processamento: {e}")
+    st.exception(e)
